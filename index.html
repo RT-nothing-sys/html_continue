@@ -421,12 +421,31 @@
       z-index: 9999;
     }
 
-    #slideshow-frame {
+    #frames-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .slide-frame {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       border: none;
-      display: block;
       background: #fff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1;
+      transition: opacity 0.25s ease-in-out;
+    }
+
+    .slide-frame.active {
+      opacity: 1;
+      pointer-events: auto;
+      z-index: 2;
     }
 
     /* プログレスバー */
@@ -698,8 +717,8 @@
     <!-- マウス検知用オーバーレイ -->
     <div id="presentation-overlay"></div>
 
-    <!-- 投影用iframe -->
-    <iframe id="slideshow-frame" src="about:blank" allow="autoplay; fullscreen"></iframe>
+    <!-- キャッシュ＆即座切り替え用マルチiframeコンテナ -->
+    <div id="frames-container"></div>
 
     <!-- フローティングコントロールバー -->
     <div class="floating-bar" id="floating-bar">
@@ -1075,6 +1094,9 @@
       }
     }
 
+    // 各スライド用iframeのマップ (index -> iframeElement)
+    let slideFrames = [];
+
     function startSlideshow() {
       if (items.length === 0) {
         alert('投影するファイルまたはURLを1つ以上追加してください。');
@@ -1096,6 +1118,9 @@
       // スリープ制御 (Wake Lock)
       requestWakeLock();
 
+      // 各スライド用iframeを事前にすべて生成してDOMに配置（プリロード＆常駐キャッシュ）
+      setupSlideFrames();
+
       // 操作バーの一時表示
       showFloatingBarTemporarily();
 
@@ -1110,6 +1135,34 @@
       }
 
       showSlide(currentIndex);
+    }
+
+    // 全スライドのiframeを事前に生成・読み込み
+    function setupSlideFrames() {
+      const container = document.getElementById('frames-container');
+      container.innerHTML = '';
+      slideFrames = [];
+
+      items.forEach((item, idx) => {
+        const iframe = document.createElement('iframe');
+        iframe.className = 'slide-frame';
+        iframe.id = `slide-frame-${idx}`;
+        iframe.setAttribute('allow', 'autoplay; fullscreen; camera; microphone');
+        
+        // リスナー中継
+        iframe.onload = () => {
+          attachIframeListeners(iframe);
+        };
+
+        if (item.content) {
+          iframe.srcdoc = item.content;
+        } else {
+          iframe.src = item.src;
+        }
+
+        container.appendChild(iframe);
+        slideFrames.push(iframe);
+      });
     }
 
     function exitSlideshow() {
@@ -1133,9 +1186,11 @@
 
       document.getElementById('presentation-view').style.display = 'none';
       document.getElementById('config-view').style.display = 'flex';
-      const iframe = document.getElementById('slideshow-frame');
-      iframe.src = 'about:blank';
-      iframe.removeAttribute('srcdoc');
+
+      // リソース解放
+      const container = document.getElementById('frames-container');
+      container.innerHTML = '';
+      slideFrames = [];
     }
 
     // --- 操作メニューの自動非表示・カーソル制御 ---
@@ -1186,9 +1241,8 @@
       });
     }
 
-    // iframe内部のイベントを親ウィンドウに中継する仕組み
-    function attachIframeListeners() {
-      const iframe = document.getElementById('slideshow-frame');
+    // 各iframe内部のイベントを親ウィンドウに中継する仕組み
+    function attachIframeListeners(iframe) {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
         if (doc) {
@@ -1211,28 +1265,36 @@
       }
     }
 
+    // スライド切り替え（キャッシュされたiframeを瞬時に切り替え）
     function showSlide(index) {
       if (!isPlaying || items.length === 0) return;
 
       const isRandom = getSelectedPlaybackMode() === 'random';
       const item = items[index];
 
-      // フレームにソース/HTMLコンテンツを適用
-      const iframe = document.getElementById('slideshow-frame');
-      
-      // onload時にiframe内リスナーを再アタッチ
-      iframe.onload = () => {
-        attachIframeListeners();
-      };
-
-      if (item.content) {
-        // ローカルHTMLファイル（srcdocを使用することで安全かつCORSエラーなく描画）
-        iframe.removeAttribute('src');
-        iframe.srcdoc = item.content;
-      } else {
-        iframe.removeAttribute('srcdoc');
-        iframe.src = item.src;
-      }
+      // すべてのiframeの表示状態を更新（対象インデックスのみアクティブ）
+      slideFrames.forEach((frame, idx) => {
+        if (idx === index) {
+          frame.classList.add('active');
+          // iframe内の動画要素等があれば再生を促す
+          try {
+            const v = frame.contentDocument?.querySelector('video');
+            if (v && typeof v.play === 'function') {
+              v.currentTime = 0;
+              v.play().catch(() => {});
+            }
+          } catch (e) {}
+        } else {
+          frame.classList.remove('active');
+          // 非表示になったスライド内の動画は一時停止（負荷軽減）
+          try {
+            const v = frame.contentDocument?.querySelector('video');
+            if (v && typeof v.pause === 'function') {
+              v.pause();
+            }
+          } catch (e) {}
+        }
+      });
 
       // 情報UI更新
       document.getElementById('floating-index').textContent = `${index + 1} / ${items.length}`;
