@@ -475,6 +475,53 @@
       pointer-events: auto;
     }
 
+    /* 投影用オーバーレイ（マウス検知およびクリック貫通防止/復帰レイヤー） */
+    #presentation-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10000;
+      background: transparent;
+      pointer-events: none; /* 通常時は貫通させてiframe操作も可能にするが、マウス追従用 */
+    }
+
+    /* 右上常時終了ボタン (マウス移動時に表示) */
+    .floating-exit-top {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      background: rgba(22, 27, 34, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 10003;
+      transform: translateY(-10px);
+    }
+
+    .floating-exit-top:hover {
+      background: rgba(248, 81, 73, 0.85);
+      border-color: rgba(248, 81, 73, 1);
+    }
+
+    .floating-exit-top.show {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
     /* マウス停止時のカーソル非表示 */
     .hide-cursor {
       cursor: none !important;
@@ -641,6 +688,15 @@
     <div id="progress-container">
       <div id="progress-bar"></div>
     </div>
+
+    <!-- 右上常時終了ボタン (マウス操作時に出現) -->
+    <button class="floating-exit-top" id="floating-exit-top" onclick="exitSlideshow()" title="スライドショーを終了 (Escキー)">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>
+      終了
+    </button>
+
+    <!-- マウス検知用オーバーレイ -->
+    <div id="presentation-overlay"></div>
 
     <!-- 投影用iframe -->
     <iframe id="slideshow-frame" src="about:blank" allow="autoplay; fullscreen"></iframe>
@@ -1068,6 +1124,8 @@
       // カーソル表示復帰
       document.getElementById('presentation-view').classList.remove('hide-cursor');
       document.getElementById('floating-bar').classList.remove('show');
+      const exitTop = document.getElementById('floating-exit-top');
+      if (exitTop) exitTop.classList.remove('show');
 
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
@@ -1086,29 +1144,38 @@
 
       const presView = document.getElementById('presentation-view');
       const floatingBar = document.getElementById('floating-bar');
+      const exitTop = document.getElementById('floating-exit-top');
 
       presView.classList.remove('hide-cursor');
       floatingBar.classList.add('show');
+      if (exitTop) exitTop.classList.add('show');
 
       clearTimeout(hideControlsTimeout);
       hideControlsTimeout = setTimeout(() => {
         if (isPlaying) {
           floatingBar.classList.remove('show');
+          if (exitTop) exitTop.classList.remove('show');
           presView.classList.add('hide-cursor');
         }
-      }, 2500); // 2.5秒間マウス操作がなければ非表示
+      }, 2500); // 2.5秒間操作がなければ非表示
     }
 
     function setupActivityDetection() {
-      const presView = document.getElementById('presentation-view');
-      const events = ['mousemove', 'mousedown', 'touchstart', 'keydown'];
+      const events = ['mousemove', 'mousedown', 'touchstart', 'pointermove'];
 
       events.forEach(evt => {
         window.addEventListener(evt, () => {
           if (isPlaying) {
             showFloatingBarTemporarily();
           }
-        }, { passive: true });
+        }, { passive: true, capture: true });
+      });
+
+      // ブラウザ標準の全画面解除イベント (ESCキー押下で全画面解除されたら自動終了)
+      document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && isPlaying) {
+          exitSlideshow();
+        }
       });
 
       // タブ復帰時のWake Lock再取得
@@ -1119,6 +1186,31 @@
       });
     }
 
+    // iframe内部のイベントを親ウィンドウに中継する仕組み
+    function attachIframeListeners() {
+      const iframe = document.getElementById('slideshow-frame');
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc) {
+          // マウス移動・操作検知
+          ['mousemove', 'mousedown', 'touchstart', 'pointermove'].forEach(evt => {
+            doc.addEventListener(evt, () => {
+              if (isPlaying) showFloatingBarTemporarily();
+            }, { passive: true });
+          });
+
+          // キーボードショートカット検知
+          doc.addEventListener('keydown', (e) => {
+            if (!isPlaying) return;
+            handleGlobalKeyDown(e);
+          });
+        }
+      } catch (err) {
+        // 異なるドメインのWebサイトの場合はCORS制限で直接リスナー不可
+        console.log('Cross-origin iframe detected; using fallback listeners.');
+      }
+    }
+
     function showSlide(index) {
       if (!isPlaying || items.length === 0) return;
 
@@ -1127,6 +1219,12 @@
 
       // フレームにソース/HTMLコンテンツを適用
       const iframe = document.getElementById('slideshow-frame');
+      
+      // onload時にiframe内リスナーを再アタッチ
+      iframe.onload = () => {
+        attachIframeListeners();
+      };
+
       if (item.content) {
         // ローカルHTMLファイル（srcdocを使用することで安全かつCORSエラーなく描画）
         iframe.removeAttribute('src');
@@ -1240,31 +1338,34 @@
       document.getElementById('floating-timer').textContent = `${timeRemaining}s`;
     }
 
-    // --- キーボードショートカット ---
-    function setupKeyShortcuts() {
-      window.addEventListener('keydown', (e) => {
-        if (!isPlaying) return;
+    // --- キーボードショートカット共通ハンドラ ---
+    function handleGlobalKeyDown(e) {
+      if (!isPlaying) return;
 
-        switch (e.key) {
-          case 'ArrowRight':
-          case 'PageDown':
-            nextSlide();
-            showFloatingBarTemporarily();
-            break;
-          case 'ArrowLeft':
-          case 'PageUp':
-            prevSlide();
-            showFloatingBarTemporarily();
-            break;
-          case ' ': // Space
-            e.preventDefault();
-            togglePause();
-            break;
-          case 'Escape':
-            exitSlideshow();
-            break;
-        }
-      });
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'PageDown':
+          nextSlide();
+          showFloatingBarTemporarily();
+          break;
+        case 'ArrowLeft':
+        case 'PageUp':
+          prevSlide();
+          showFloatingBarTemporarily();
+          break;
+        case ' ': // Space
+          e.preventDefault();
+          togglePause();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          exitSlideshow();
+          break;
+      }
+    }
+
+    function setupKeyShortcuts() {
+      window.addEventListener('keydown', handleGlobalKeyDown, true);
     }
   </script>
 </body>
