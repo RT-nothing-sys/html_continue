@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML & Web スライドショービューア</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-card: #21262d;
+      --bg-hover: #30363d;
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --accent-gradient: linear-gradient(135deg, #388bfd 0%, #a371f7 100%);
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --border: #30363d;
+      --border-focus: #58a6ff;
+      --danger: #f85149;
+      --danger-hover: #ff7b72;
+      --success: #3fb950;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      --font-main: 'Outfit', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* === 設定画面 (Config View) === */
+    #config-view {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+    }
+
+    /* 登録フォーム */
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr 120px auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    @media (max-width: 600px) {
+      .input-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    input, select, button {
+      font-family: inherit;
+      font-size: 0.95rem;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      width: 100%;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+    }
+
+    /* ファイルアップロードゾーン */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      text-align: center;
+      background: rgba(33, 38, 45, 0.5);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(88, 166, 255, 0.05);
+    }
+
+    .upload-zone p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .upload-zone span {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ボタン共通 */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+    }
+
+    .btn-danger {
+      background: rgba(248, 81, 73, 0.15);
+      color: var(--danger-hover);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-large {
+      padding: 14px 28px;
+      font-size: 1.1rem;
+      border-radius: var(--radius-md);
+      background: var(--accent-gradient);
+      color: white;
+      box-shadow: 0 4px 14px rgba(56, 139, 253, 0.4);
+    }
+
+    .btn-large:hover {
+      opacity: 0.95;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(56, 139, 253, 0.5);
+    }
+
+    /* アイテムリスト */
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .item-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .item-list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .item-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      transition: border-color 0.2s;
+    }
+
+    .item-card:hover {
+      border-color: var(--accent);
+    }
+
+    .item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .item-title {
+      font-size: 0.95rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-main);
+    }
+
+    .item-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--border);
+      color: var(--text-muted);
+      margin-right: 6px;
+    }
+
+    .item-badge.url {
+      background: rgba(56, 139, 253, 0.2);
+      color: var(--accent);
+    }
+    .item-badge.file {
+      background: rgba(163, 113, 247, 0.2);
+      color: #d2a8ff;
+    }
+
+    .item-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .item-duration-input {
+      width: 75px !important;
+      padding: 6px 8px !important;
+      text-align: center;
+      font-size: 0.85rem !important;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px;
+      color: var(--text-muted);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      font-size: 0.95rem;
+    }
+
+    /* オプション設定エリア */
+    .options-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 16px;
+    }
+
+    .radio-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--text-main);
+    }
+
+    .radio-label input[type="radio"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* === プレゼンテーション/再生画面 (Presentation View) === */
+    #presentation-view {
+      display: none;
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      z-index: 9999;
+    }
+
+    #slideshow-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      background: #fff;
+    }
+
+    /* プログレスバー */
+    #progress-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      z-index: 10001;
+      pointer-events: none;
+    }
+
+    #progress-bar {
+      width: 0%;
+      height: 100%;
+      background: var(--accent-gradient);
+      transition: width 0.1s linear;
+    }
+
+    /* フローティング操作バー */
+    .floating-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(22, 27, 34, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 8px 16px;
+      border-radius: 40px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 10002;
+    }
+
+    .floating-bar.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+
+    /* マウス停止時のカーソル非表示 */
+    .hide-cursor {
+      cursor: none !important;
+    }
+
+    .floating-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.2s;
+    }
+
+    .floating-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .floating-info {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      padding: 0 8px;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .floating-timer {
+      font-weight: 600;
+      color: var(--accent);
+      min-width: 32px;
+      text-align: right;
+    }
+
+    /* ユーティリティ */
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .icon-btn:hover {
+      color: var(--text-main);
+      background: var(--bg-hover);
+    }
+    .icon-btn.delete:hover {
+      color: var(--danger-hover);
+      background: rgba(248, 81, 73, 0.15);
+    }
+
+    .badge-random {
+      background: rgba(163, 113, 247, 0.2);
+      color: #d2a8ff;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+    }
+    .badge-seq {
+      background: rgba(56, 139, 253, 0.2);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= 設定画面 ================= -->
+  <main id="config-view">
+    <header>
+      <h1>HTML & Web 連続スライドショー</h1>
+      <p>ローカルHTMLファイルやWebサイトを順番またはランダムに連続投影します</p>
+    </header>
+
+    <!-- 1. アイテム追加カード -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+        スライドの追加
+      </div>
+
+      <!-- URL追加フォーム -->
+      <form id="add-url-form" class="input-grid" onsubmit="event.preventDefault(); addUrlItem();">
+        <div class="form-group">
+          <label for="url-input">URL または Webパス</label>
+          <input type="text" id="url-input" placeholder="https://example.com または相対パス" />
+        </div>
+        <div class="form-group">
+          <label for="url-duration">秒数</label>
+          <input type="number" id="url-duration" value="10" min="1" max="86400" />
+        </div>
+        <button type="submit" class="btn btn-primary">URLを追加</button>
+      </form>
+
+      <!-- ローカルファイル追加ドラッグ＆ドロップ -->
+      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click();">
+        <input type="file" id="file-input" multiple accept=".html,.htm,.svg,.txt,.pdf,.jpg,.jpeg,.png,.webp" style="display: none;" onchange="handleFileSelect(event)">
+        <p>📂 <strong>ローカルHTMLファイル</strong>をここにドラッグ＆ドロップ（または<span>クリックして選択</span>）</p>
+        <p style="font-size: 0.8rem; margin-top: 4px; color: #8b949e;">※ 複数選択可能 / デフォルト10秒で追加されます</p>
+      </div>
+    </div>
+
+    <!-- 2. リスト表示 & 設定カード -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-title">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/></svg>
+          投影リスト (<span id="item-count">0</span>件)
+        </div>
+        <button type="button" class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="clearAllItems()">すべてクリア</button>
+      </div>
+
+      <!-- リスト一覧 -->
+      <div class="item-list" id="items-container">
+        <div class="empty-state">リストが空です。上記からファイルまたはURLを追加してください。</div>
+      </div>
+
+      <!-- 再生モード等のオプション -->
+      <div class="options-row">
+        <div class="form-group">
+          <label>再生順序</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="playbackMode" value="sequence" checked>
+              <span>順番再生 (ループ)</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="playbackMode" value="random">
+              <span>ランダム再生</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" style="flex-direction: row; align-items: center; gap: 10px;">
+          <label class="radio-label">
+            <input type="checkbox" id="fullscreen-check" checked>
+            <span>開始時に全画面表示</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 開始ボタン -->
+      <div style="text-align: center; margin-top: 10px;">
+        <button type="button" class="btn btn-large" style="width: 100%;" onclick="startSlideshow()">
+          ▶ 投影スライドショーを開始
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= プレゼンテーション画面 ================= -->
+  <div id="presentation-view">
+    <div id="progress-container">
+      <div id="progress-bar"></div>
+    </div>
+
+    <!-- 投影用iframe -->
+    <iframe id="slideshow-frame" src="about:blank" allow="autoplay; fullscreen"></iframe>
+
+    <!-- フローティングコントロールバー -->
+    <div class="floating-bar" id="floating-bar">
+      <button class="floating-btn" onclick="prevSlide()" title="前のスライド (←キー)">⏮ 前へ</button>
+      <button class="floating-btn" id="pause-btn" onclick="togglePause()" title="一時停止/再開 (Spaceキー)">⏸ 一時停止</button>
+      <button class="floating-btn" onclick="nextSlide()" title="次のスライド (→キー)">次へ ⏭</button>
+      
+      <div class="floating-info">
+        <span id="floating-index">1 / 1</span>
+        <span id="floating-mode" class="badge-seq" style="margin-left: 6px;">順番</span>
+      </div>
+
+      <div class="floating-timer" id="floating-timer">10s</div>
+
+      <button class="floating-btn" onclick="exitSlideshow()" title="終了して設定に戻る (Escキー)" style="color: var(--danger-hover);">✕ 終了</button>
+    </div>
+  </div>
+
+  <script>
+    // --- 状態管理 ---
+    let items = []; // { id, type: 'url'|'file', name, src, duration }
+    let currentIndex = 0;
+    let isPlaying = false;
+    let isPaused = false;
+    let timerId = null;
+    let progressInterval = null;
+    let timeRemaining = 0;
+    let currentTotalTime = 0;
+    let shuffleHistory = []; // ランダム再生用インデックス記録
+
+    // 自動非表示 & スリープ防止管理
+    let wakeLockSentinel = null;
+    let hideControlsTimeout = null;
+
+    // 初期化: localStorageからの読み込み
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSavedItems();
+      setupDragAndDrop();
+      setupKeyShortcuts();
+      setupActivityDetection();
+    });
+
+    // --- アイテム追加・管理 ---
+    function addUrlItem() {
+      const urlInput = document.getElementById('url-input');
+      const durationInput = document.getElementById('url-duration');
+      let url = urlInput.value.trim();
+      const duration = parseInt(durationInput.value, 10) || 10;
+
+      if (!url) {
+        alert('URLを入力してください');
+        return;
+      }
+
+      // プロトコル補完
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/') && !url.startsWith('./') && !url.startsWith('data:')) {
+        url = 'https://' + url;
+      }
+
+      const item = {
+        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        type: 'url',
+        name: url,
+        src: url,
+        content: null,
+        duration: duration
+      };
+
+      items.push(item);
+      urlInput.value = '';
+      renderList();
+      saveItems();
+    }
+
+    function handleFileSelect(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+
+      Array.from(files).forEach(file => {
+        const isHtml = file.name.endsWith('.html') || file.name.endsWith('.htm') || file.type.includes('html');
+        
+        if (isHtml) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const content = e.target.result;
+            const item = {
+              id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              type: 'file',
+              name: file.name,
+              src: null,
+              content: content,
+              duration: 10
+            };
+            items.push(item);
+            renderList();
+          };
+          reader.readAsText(file);
+        } else {
+          // 画像等のその他メディア
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            const item = {
+              id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              type: 'file',
+              name: file.name,
+              src: dataUrl,
+              content: null,
+              duration: 10
+            };
+            items.push(item);
+            renderList();
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // 入力クリア
+      event.target.value = '';
+    }
+
+    function removeItem(id) {
+      items = items.filter(item => item.id !== id);
+      renderList();
+      saveItems();
+    }
+
+    function updateDuration(id, value) {
+      const duration = Math.max(1, parseInt(value, 10) || 1);
+      const item = items.find(i => i.id === id);
+      if (item) {
+        item.duration = duration;
+        saveItems();
+      }
+    }
+
+    function clearAllItems() {
+      if (items.length === 0) return;
+      if (confirm('投影リストをすべてクリアしますか？')) {
+        items = [];
+        renderList();
+        saveItems();
+      }
+    }
+
+    function renderList() {
+      const container = document.getElementById('items-container');
+      const countSpan = document.getElementById('item-count');
+      countSpan.textContent = items.length;
+
+      if (items.length === 0) {
+        container.innerHTML = '<div class="empty-state">リストが空です。上記からファイルまたはURLを追加してください。</div>';
+        return;
+      }
+
+      container.innerHTML = items.map((item, index) => `
+        <div class="item-card">
+          <div class="item-info">
+            <div class="item-title" title="${item.name}">
+              <span class="item-badge ${item.type}">${item.type.toUpperCase()}</span>
+              <strong>${index + 1}.</strong> ${item.name}
+            </div>
+          </div>
+          <div class="item-controls">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display:flex; align-items:center; gap:4px;">
+              <span>秒数:</span>
+              <input type="number" class="item-duration-input" min="1" value="${item.duration}" onchange="updateDuration('${item.id}', this.value)">
+            </label>
+            <button class="icon-btn delete" onclick="removeItem('${item.id}')" title="削除">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ローカル保存 (URLのみ保存可能)
+    function saveItems() {
+      const saveable = items
+        .filter(item => item.type === 'url')
+        .map(item => ({
+          type: item.type,
+          name: item.name,
+          src: item.src,
+          duration: item.duration
+        }));
+      localStorage.setItem('slideshow_items_config', JSON.stringify(saveable));
+    }
+
+    function loadSavedItems() {
+      try {
+        const saved = localStorage.getItem('slideshow_items_config');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          items = parsed
+            .filter(item => item.type === 'url' && item.src)
+            .map(item => ({
+              id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              ...item
+            }));
+          renderList();
+        }
+      } catch (e) {
+        console.error('設定の復元に失敗しました', e);
+      }
+    }
+
+    // ドラッグ＆ドロップ設定
+    function setupDragAndDrop() {
+      const dropZone = document.getElementById('drop-zone');
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('dragover');
+        });
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          handleFileSelect({ target: { files: files } });
+        }
+      });
+    }
+
+    // --- スライドショー制御 ---
+    function getSelectedPlaybackMode() {
+      const checkedRadio = document.querySelector('input[name="playbackMode"]:checked');
+      return checkedRadio ? checkedRadio.value : 'sequence';
+    }
+
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          wakeLockSentinel.addEventListener('release', () => {
+            wakeLockSentinel = null;
+          });
+        } catch (err) {
+          console.warn('Screen Wake Lock の取得に失敗しました:', err);
+        }
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLockSentinel !== null) {
+        wakeLockSentinel.release().catch(() => {});
+        wakeLockSentinel = null;
+      }
+    }
+
+    function startSlideshow() {
+      if (items.length === 0) {
+        alert('投影するファイルまたはURLを1つ以上追加してください。');
+        return;
+      }
+
+      const wantFullscreen = document.getElementById('fullscreen-check').checked;
+
+      currentIndex = 0;
+      shuffleHistory = [];
+      isPlaying = true;
+      isPaused = false;
+
+      // 画面切り替え
+      document.getElementById('config-view').style.display = 'none';
+      const presView = document.getElementById('presentation-view');
+      presView.style.display = 'block';
+
+      // スリープ制御 (Wake Lock)
+      requestWakeLock();
+
+      // 操作バーの一時表示
+      showFloatingBarTemporarily();
+
+      if (wantFullscreen) {
+        try {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+          }
+        } catch (e) {
+          console.warn('全画面切り替えはスキップされました', e);
+        }
+      }
+
+      showSlide(currentIndex);
+    }
+
+    function exitSlideshow() {
+      isPlaying = false;
+      clearTimeout(timerId);
+      clearInterval(progressInterval);
+      clearTimeout(hideControlsTimeout);
+
+      // スリープ制御解除
+      releaseWakeLock();
+
+      // カーソル表示復帰
+      document.getElementById('presentation-view').classList.remove('hide-cursor');
+      document.getElementById('floating-bar').classList.remove('show');
+
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+
+      document.getElementById('presentation-view').style.display = 'none';
+      document.getElementById('config-view').style.display = 'flex';
+      const iframe = document.getElementById('slideshow-frame');
+      iframe.src = 'about:blank';
+      iframe.removeAttribute('srcdoc');
+    }
+
+    // --- 操作メニューの自動非表示・カーソル制御 ---
+    function showFloatingBarTemporarily() {
+      if (!isPlaying) return;
+
+      const presView = document.getElementById('presentation-view');
+      const floatingBar = document.getElementById('floating-bar');
+
+      presView.classList.remove('hide-cursor');
+      floatingBar.classList.add('show');
+
+      clearTimeout(hideControlsTimeout);
+      hideControlsTimeout = setTimeout(() => {
+        if (isPlaying) {
+          floatingBar.classList.remove('show');
+          presView.classList.add('hide-cursor');
+        }
+      }, 2500); // 2.5秒間マウス操作がなければ非表示
+    }
+
+    function setupActivityDetection() {
+      const presView = document.getElementById('presentation-view');
+      const events = ['mousemove', 'mousedown', 'touchstart', 'keydown'];
+
+      events.forEach(evt => {
+        window.addEventListener(evt, () => {
+          if (isPlaying) {
+            showFloatingBarTemporarily();
+          }
+        }, { passive: true });
+      });
+
+      // タブ復帰時のWake Lock再取得
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && isPlaying) {
+          requestWakeLock();
+        }
+      });
+    }
+
+    function showSlide(index) {
+      if (!isPlaying || items.length === 0) return;
+
+      const isRandom = getSelectedPlaybackMode() === 'random';
+      const item = items[index];
+
+      // フレームにソース/HTMLコンテンツを適用
+      const iframe = document.getElementById('slideshow-frame');
+      if (item.content) {
+        // ローカルHTMLファイル（srcdocを使用することで安全かつCORSエラーなく描画）
+        iframe.removeAttribute('src');
+        iframe.srcdoc = item.content;
+      } else {
+        iframe.removeAttribute('srcdoc');
+        iframe.src = item.src;
+      }
+
+      // 情報UI更新
+      document.getElementById('floating-index').textContent = `${index + 1} / ${items.length}`;
+      const modeBadge = document.getElementById('floating-mode');
+      if (isRandom) {
+        modeBadge.textContent = 'ランダム';
+        modeBadge.className = 'badge-random';
+      } else {
+        modeBadge.textContent = '順番ループ';
+        modeBadge.className = 'badge-seq';
+      }
+
+      // タイマー管理
+      currentTotalTime = item.duration;
+      timeRemaining = item.duration;
+      updateTimerDisplay();
+
+      clearTimeout(timerId);
+      clearInterval(progressInterval);
+
+      startSlideCountdown();
+    }
+
+    function startSlideCountdown() {
+      const startTime = Date.now();
+      const totalMs = currentTotalTime * 1000;
+      const initialRemainingMs = timeRemaining * 1000;
+      const endTime = startTime + initialRemainingMs;
+
+      const progressBar = document.getElementById('progress-bar');
+
+      progressInterval = setInterval(() => {
+        if (isPaused) return;
+
+        const now = Date.now();
+        const leftMs = Math.max(0, endTime - now);
+        timeRemaining = Math.ceil(leftMs / 1000);
+        updateTimerDisplay();
+
+        // プログレスバー計算 (0% -> 100%)
+        const elapsedTotal = totalMs - leftMs;
+        const percent = Math.min(100, (elapsedTotal / totalMs) * 100);
+        progressBar.style.width = percent + '%';
+
+        if (leftMs <= 0) {
+          clearInterval(progressInterval);
+          nextSlide();
+        }
+      }, 100);
+    }
+
+    function nextSlide() {
+      if (!isPlaying || items.length === 0) return;
+
+      const isRandom = getSelectedPlaybackMode() === 'random';
+      if (isRandom) {
+        if (items.length === 1) {
+          currentIndex = 0;
+        } else {
+          let nextIdx;
+          do {
+            nextIdx = Math.floor(Math.random() * items.length);
+          } while (nextIdx === currentIndex);
+          currentIndex = nextIdx;
+        }
+      } else {
+        // 順番再生 (最後に行くと0へループ)
+        currentIndex = (currentIndex + 1) % items.length;
+      }
+
+      showSlide(currentIndex);
+    }
+
+    function prevSlide() {
+      if (!isPlaying || items.length === 0) return;
+
+      const isRandom = getSelectedPlaybackMode() === 'random';
+      if (isRandom) {
+        currentIndex = Math.floor(Math.random() * items.length);
+      } else {
+        currentIndex = (currentIndex - 1 + items.length) % items.length;
+      }
+
+      showSlide(currentIndex);
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+      const btn = document.getElementById('pause-btn');
+      if (isPaused) {
+        btn.textContent = '▶ 再開';
+        showFloatingBarTemporarily();
+      } else {
+        btn.textContent = '⏸ 一時停止';
+        showFloatingBarTemporarily();
+        // 再開時にカウントダウン再設定
+        clearInterval(progressInterval);
+        startSlideCountdown();
+      }
+    }
+
+    function updateTimerDisplay() {
+      document.getElementById('floating-timer').textContent = `${timeRemaining}s`;
+    }
+
+    // --- キーボードショートカット ---
+    function setupKeyShortcuts() {
+      window.addEventListener('keydown', (e) => {
+        if (!isPlaying) return;
+
+        switch (e.key) {
+          case 'ArrowRight':
+          case 'PageDown':
+            nextSlide();
+            showFloatingBarTemporarily();
+            break;
+          case 'ArrowLeft':
+          case 'PageUp':
+            prevSlide();
+            showFloatingBarTemporarily();
+            break;
+          case ' ': // Space
+            e.preventDefault();
+            togglePause();
+            break;
+          case 'Escape':
+            exitSlideshow();
+            break;
+        }
+      });
+    }
+  </script>
+</body>
+</html>
