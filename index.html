@@ -1094,8 +1094,13 @@
       }
     }
 
-    // 各スライド用iframeのマップ (index -> iframeElement)
-    let slideFrames = [];
+    // === Chromebook省メモリ・先行プリロード制御 ===
+    // 画面上には常に「現在表示フレーム(current)」と「事前読み込みフレーム(preload)」の2枚のみ維持し、
+    // 前のスライドは完全に解放（about:blank）してCPU/GPU/メモリの累積を防ぐ
+    let frameA = null;
+    let frameB = null;
+    let activeFrame = 'A'; // 'A' または 'B'
+    let preloadTimeoutId = null;
 
     function startSlideshow() {
       if (items.length === 0) {
@@ -1118,8 +1123,8 @@
       // スリープ制御 (Wake Lock)
       requestWakeLock();
 
-      // 各スライド用iframeを事前にすべて生成してDOMに配置（プリロード＆常駐キャッシュ）
-      setupSlideFrames();
+      // デュアルiframeの初期化
+      setupDualFrames();
 
       // 操作バーの一時表示
       showFloatingBarTemporarily();
@@ -1134,35 +1139,58 @@
         }
       }
 
-      showSlide(currentIndex);
+      // 最初のスライドを表示
+      loadSlideToFrame(frameA, items[currentIndex]);
+      frameA.classList.add('active');
+      frameB.classList.remove('active');
+      activeFrame = 'A';
+
+      onSlideStarted(currentIndex);
     }
 
-    // 全スライドのiframeを事前に生成・読み込み
-    function setupSlideFrames() {
+    // デュアルiframeの生成
+    function setupDualFrames() {
       const container = document.getElementById('frames-container');
       container.innerHTML = '';
-      slideFrames = [];
 
-      items.forEach((item, idx) => {
-        const iframe = document.createElement('iframe');
-        iframe.className = 'slide-frame';
-        iframe.id = `slide-frame-${idx}`;
-        iframe.setAttribute('allow', 'autoplay; fullscreen; camera; microphone');
-        
-        // リスナー中継
-        iframe.onload = () => {
-          attachIframeListeners(iframe);
-        };
+      frameA = document.createElement('iframe');
+      frameA.className = 'slide-frame';
+      frameA.id = 'slide-frame-a';
+      frameA.setAttribute('allow', 'autoplay; fullscreen; camera; microphone');
+      frameA.onload = () => attachIframeListeners(frameA);
 
-        if (item.content) {
-          iframe.srcdoc = item.content;
-        } else {
-          iframe.src = item.src;
-        }
+      frameB = document.createElement('iframe');
+      frameB.className = 'slide-frame';
+      frameB.id = 'slide-frame-b';
+      frameB.setAttribute('allow', 'autoplay; fullscreen; camera; microphone');
+      frameB.onload = () => attachIframeListeners(frameB);
 
-        container.appendChild(iframe);
-        slideFrames.push(iframe);
-      });
+      container.appendChild(frameA);
+      container.appendChild(frameB);
+    }
+
+    // フレームへコンテンツを安全にロード
+    function loadSlideToFrame(frame, item) {
+      if (!frame || !item) return;
+      if (item.content) {
+        frame.removeAttribute('src');
+        frame.srcdoc = item.content;
+      } else {
+        frame.removeAttribute('srcdoc');
+        frame.src = item.src;
+      }
+    }
+
+    // フレームのメモリ完全解放
+    function clearFrame(frame) {
+      if (!frame) return;
+      try {
+        // 動画やオーディオがあれば即時停止
+        const v = frame.contentDocument?.querySelector('video, audio');
+        if (v && typeof v.pause === 'function') v.pause();
+      } catch (e) {}
+      frame.removeAttribute('srcdoc');
+      frame.src = 'about:blank';
     }
 
     function exitSlideshow() {
@@ -1170,6 +1198,7 @@
       clearTimeout(timerId);
       clearInterval(progressInterval);
       clearTimeout(hideControlsTimeout);
+      clearTimeout(preloadTimeoutId);
 
       // スリープ制御解除
       releaseWakeLock();
@@ -1187,10 +1216,13 @@
       document.getElementById('presentation-view').style.display = 'none';
       document.getElementById('config-view').style.display = 'flex';
 
-      // リソース解放
+      // メモリ完全解放
+      clearFrame(frameA);
+      clearFrame(frameB);
       const container = document.getElementById('frames-container');
       container.innerHTML = '';
-      slideFrames = [];
+      frameA = null;
+      frameB = null;
     }
 
     // --- 操作メニューの自動非表示・カーソル制御 ---
@@ -1212,7 +1244,7 @@
           if (exitTop) exitTop.classList.remove('show');
           presView.classList.add('hide-cursor');
         }
-      }, 2500); // 2.5秒間操作がなければ非表示
+      }, 2500);
     }
 
     function setupActivityDetection() {
@@ -1226,14 +1258,12 @@
         }, { passive: true, capture: true });
       });
 
-      // ブラウザ標準の全画面解除イベント (ESCキー押下で全画面解除されたら自動終了)
       document.addEventListener('fullscreenchange', () => {
         if (!document.fullscreenElement && isPlaying) {
           exitSlideshow();
         }
       });
 
-      // タブ復帰時のWake Lock再取得
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && isPlaying) {
           requestWakeLock();
@@ -1241,60 +1271,68 @@
       });
     }
 
-    // 各iframe内部のイベントを親ウィンドウに中継する仕組み
     function attachIframeListeners(iframe) {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
         if (doc) {
-          // マウス移動・操作検知
           ['mousemove', 'mousedown', 'touchstart', 'pointermove'].forEach(evt => {
             doc.addEventListener(evt, () => {
               if (isPlaying) showFloatingBarTemporarily();
             }, { passive: true });
           });
 
-          // キーボードショートカット検知
           doc.addEventListener('keydown', (e) => {
             if (!isPlaying) return;
             handleGlobalKeyDown(e);
           });
         }
       } catch (err) {
-        // 異なるドメインのWebサイトの場合はCORS制限で直接リスナー不可
         console.log('Cross-origin iframe detected; using fallback listeners.');
       }
     }
 
-    // スライド切り替え（キャッシュされたiframeを瞬時に切り替え）
+    // スライド切り替え（デュアルフレームのクロスフェード＆裏側完全解放）
     function showSlide(index) {
       if (!isPlaying || items.length === 0) return;
 
+      const currentFrame = (activeFrame === 'A') ? frameA : frameB;
+      const nextFrame = (activeFrame === 'A') ? frameB : frameA;
+      const nextItem = items[index];
+
+      // 次のフレームが既にプリロード済みでない場合はロード
+      const isAlreadyPreloaded = nextFrame.getAttribute('data-preloaded-idx') === String(index);
+      if (!isAlreadyPreloaded) {
+        loadSlideToFrame(nextFrame, nextItem);
+      }
+
+      // フレーム切り替え（即座表示）
+      nextFrame.classList.add('active');
+      currentFrame.classList.remove('active');
+      activeFrame = (activeFrame === 'A') ? 'B' : 'A';
+
+      // 表示されたフレーム内の動画を先頭から再生
+      try {
+        const v = nextFrame.contentDocument?.querySelector('video');
+        if (v && typeof v.play === 'function') {
+          v.currentTime = 0;
+          v.play().catch(() => {});
+        }
+      } catch (e) {}
+
+      // 切り替わった直後、旧フレームはメモリ解放（非アクティブ化して完全リセット）
+      setTimeout(() => {
+        if (isPlaying) {
+          clearFrame(currentFrame);
+          currentFrame.removeAttribute('data-preloaded-idx');
+        }
+      }, 500); // フェード遷移後に解放
+
+      onSlideStarted(index);
+    }
+
+    function onSlideStarted(index) {
       const isRandom = getSelectedPlaybackMode() === 'random';
       const item = items[index];
-
-      // すべてのiframeの表示状態を更新（対象インデックスのみアクティブ）
-      slideFrames.forEach((frame, idx) => {
-        if (idx === index) {
-          frame.classList.add('active');
-          // iframe内の動画要素等があれば再生を促す
-          try {
-            const v = frame.contentDocument?.querySelector('video');
-            if (v && typeof v.play === 'function') {
-              v.currentTime = 0;
-              v.play().catch(() => {});
-            }
-          } catch (e) {}
-        } else {
-          frame.classList.remove('active');
-          // 非表示になったスライド内の動画は一時停止（負荷軽減）
-          try {
-            const v = frame.contentDocument?.querySelector('video');
-            if (v && typeof v.pause === 'function') {
-              v.pause();
-            }
-          } catch (e) {}
-        }
-      });
 
       // 情報UI更新
       document.getElementById('floating-index').textContent = `${index + 1} / ${items.length}`;
@@ -1314,8 +1352,37 @@
 
       clearTimeout(timerId);
       clearInterval(progressInterval);
+      clearTimeout(preloadTimeoutId);
+
+      // 次のスライドの直前プリロードスケジュール（切り替えの3秒前、または短時間なら即座）
+      const preloadDelay = Math.max(100, (item.duration - 3) * 1000);
+      preloadTimeoutId = setTimeout(() => {
+        if (!isPlaying) return;
+        preloadNextSlide(index);
+      }, preloadDelay);
 
       startSlideCountdown();
+    }
+
+    // 次のスライドを裏フレームに先行読み込み（即座切り替えの準備）
+    function preloadNextSlide(currentIdx) {
+      if (items.length <= 1) return;
+      const isRandom = getSelectedPlaybackMode() === 'random';
+      let nextIdx;
+
+      if (isRandom) {
+        do {
+          nextIdx = Math.floor(Math.random() * items.length);
+        } while (nextIdx === currentIdx && items.length > 1);
+      } else {
+        nextIdx = (currentIdx + 1) % items.length;
+      }
+
+      const idleFrame = (activeFrame === 'A') ? frameB : frameA;
+      const nextItem = items[nextIdx];
+
+      loadSlideToFrame(idleFrame, nextItem);
+      idleFrame.setAttribute('data-preloaded-idx', String(nextIdx));
     }
 
     function startSlideCountdown() {
